@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Web.Http;
 using DryIoc;
 using DryIoc.WebApi;
@@ -16,7 +17,6 @@ namespace LoadTest
                     .WithoutUseInterpretation()
                     .With(FactoryMethod.ConstructorWithResolvableArguments)
             ).WithWebApi(new HttpConfiguration());
-
             Registrations.RegisterTypes(container, true);
 
             return container;
@@ -24,14 +24,13 @@ namespace LoadTest
 
         public static IContainer GetContainerForTestNoFec()
         {
-            var container = new Container((rules) =>
-                rules
-                    .WithoutFastExpressionCompiler()
-                    .WithoutDependencyDepthToSplitObjectGraph()
-                    .WithoutInterpretationForTheFirstResolution()
-                    .WithoutUseInterpretation()
-                    .With(FactoryMethod.ConstructorWithResolvableArguments)
-            ).WithWebApi(new HttpConfiguration());
+            var container = new Container(rules => rules
+                .WithoutFastExpressionCompiler()
+                .WithoutDependencyDepthToSplitObjectGraph()
+                .WithoutInterpretationForTheFirstResolution()
+                .WithoutUseInterpretation()
+                .With(FactoryMethod.ConstructorWithResolvableArguments))
+                .WithWebApi(new HttpConfiguration());
 
             Registrations.RegisterTypes(container, true);
 
@@ -79,7 +78,11 @@ namespace LoadTest
             var controllerTypes = TestHelper.GetAllControllers();
             IContainer container = GetContainerForTestFec();
 
+            Console.WriteLine("Validating everything...");
+            var sw = Stopwatch.StartNew();
             var validateResult = container.Validate();
+            Console.WriteLine($"Validated in {sw.Elapsed.TotalMilliseconds} ms");
+
 
             if (validateResult.Length != 0)
             {
