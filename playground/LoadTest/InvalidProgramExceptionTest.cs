@@ -7,12 +7,26 @@ namespace LoadTest
 {
     static class InvalidProgramExceptionTest
     {
-
-        public static IContainer GetContainerForTest()
+        public static IContainer GetContainerForTestFec()
         {
             var container = new Container((rules) =>
                 rules
-                    //.WithoutFastExpressionCompiler()
+                    .WithoutDependencyDepthToSplitObjectGraph()
+                    .WithoutInterpretationForTheFirstResolution()
+                    .WithoutUseInterpretation()
+                    .With(FactoryMethod.ConstructorWithResolvableArguments)
+            ).WithWebApi(new HttpConfiguration());
+
+            Registrations.RegisterTypes(container, true);
+
+            return container;
+        }
+
+        public static IContainer GetContainerForTestNoFec()
+        {
+            var container = new Container((rules) =>
+                rules
+                    .WithoutFastExpressionCompiler()
                     .WithoutDependencyDepthToSplitObjectGraph()
                     .WithoutInterpretationForTheFirstResolution()
                     .WithoutUseInterpretation()
@@ -45,7 +59,25 @@ namespace LoadTest
             Console.WriteLine("Starting InvalidProgramException test");
 
             var controllerTypes = TestHelper.GetAllControllers();
-            var container = GetContainerForTest();
+            IContainer container = GetContainerForTestNoFec();
+
+            var validateResult = container.Validate();
+
+            if (validateResult.Length != 0)
+            {
+                throw new Exception(validateResult.ToString());
+            }
+
+            ResolveAllControllers(container, controllerTypes);
+            ResolveAllControllers(container, controllerTypes);
+        }
+
+        public static void Start2()
+        {
+            Console.WriteLine("Starting InvalidProgramException test");
+
+            var controllerTypes = TestHelper.GetAllControllers();
+            IContainer container = GetContainerForTestFec();
 
             var validateResult = container.Validate();
 

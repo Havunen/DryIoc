@@ -57,12 +57,31 @@ ResolveAllControllersOnce of 156 controllers is done in 0.1478801 seconds
 
         public static IContainer RootContainer = null;
 
-        public static IContainer CreateContainer()
+        public static IContainer CreateContainerFec()
         {
             var config = new HttpConfiguration();
             var container = new Container(rules => rules
-                    //.WithoutFastExpressionCompiler()
-                    //.WithUseInterpretation()
+                    .WithUseInterpretation()
+                    .With(FactoryMethod.ConstructorWithResolvableArguments))
+                .WithWebApi(config);
+
+            Registrations.RegisterTypes(container, true);
+            RootContainer = container;
+
+            Console.WriteLine("New container created");
+            Console.WriteLine("");
+            Console.WriteLine(container.ToString());
+            Console.WriteLine("");
+
+            return container;
+        }
+
+        public static IContainer CreateContainerNoFec()
+        {
+            var config = new HttpConfiguration();
+            var container = new Container(rules => rules
+                    .WithoutFastExpressionCompiler()
+                    .WithUseInterpretation()
                     .With(FactoryMethod.ConstructorWithResolvableArguments))
                 .WithWebApi(config);
 
@@ -79,7 +98,7 @@ ResolveAllControllersOnce of 156 controllers is done in 0.1478801 seconds
 
         public static void Start()
         {
-            var container = CreateContainer();
+            var container = CreateContainerNoFec();
 
             var stopWatch = new Stopwatch();
             stopWatch.Start();
@@ -133,12 +152,12 @@ ResolveAllControllersOnce of 156 controllers is done in 0.1478801 seconds
             Console.WriteLine("----------------------------------");
             Console.WriteLine("");
 
-            container = CreateContainer();
+            container = CreateContainerFec();
             ForceGarbageCollector();
             ResolveAllControllersOnce(container, controllers); // Interpret
             ResolveAllControllersOnce(container, controllers); // Compile, cache
             IterateInOrder(container, controllers);
-            container = CreateContainer();
+            container = CreateContainerFec();
             ForceGarbageCollector();
             ResolveAllControllersOnce(container, controllers); // Interpret
             ResolveAllControllersOnce(container, controllers); // Compile, cache
@@ -153,10 +172,94 @@ ResolveAllControllersOnce of 156 controllers is done in 0.1478801 seconds
             Console.WriteLine("---------------------------------------");
             Console.WriteLine("");
 
-            container = CreateContainer();
+            container = CreateContainerFec();
             ForceGarbageCollector();
             IterateInOrder(container, controllers);
-            container = CreateContainer();
+            container = CreateContainerFec();
+            ForceGarbageCollector();
+            StartRandomOrderTest(container, controllers);
+        }
+
+        public static void Start2()
+        {
+            var container = CreateContainerFec();
+
+            var stopWatch = new Stopwatch();
+            stopWatch.Start();
+            Console.WriteLine("Validate started");
+
+            // Validate IoC registrations
+
+            bool IsController(ServiceRegistrationInfo x) => x.ServiceType.Name.EndsWith("Controller");
+
+            // Paralleling the Validation
+            //var controllers = container.GetServiceRegistrations()
+            //    .Where(IsController).Select(x => x.ToServiceInfo()).ToArray();
+            //var controllersPerCpu = new List<ServiceInfo>[Environment.ProcessorCount];
+            //for (var i = 0; i < controllers.Length;)
+            //    for (var j = 0; j < Environment.ProcessorCount && i < controllers.Length; j++, i++)
+            //        (controllersPerCpu[j] ?? (controllersPerCpu[j] = new List<ServiceInfo>())).Add(controllers[i]);
+            //var validationTasks = controllersPerCpu
+            //    .Select(x => Task.Run(() => container.Validate(x.ToArray()))).ToArray();
+            //var results = (await Task.WhenAll(validationTasks))
+            //    .SelectMany(x => x).ToArray();
+
+            var results = container.Validate(IsController);
+            //var results = container.Validate();
+            if (results.Length > 0)
+            {
+                foreach (var kvp in results)
+                {
+                    Console.WriteLine("Validation error ServiceType = {0}", kvp.Key.ServiceType.Name);
+                    Console.WriteLine(kvp.Value.Message);
+                }
+
+                throw new Exception(results.ToString());
+            }
+            stopWatch.Stop();
+            var ts = stopWatch.Elapsed;
+
+            Console.WriteLine("");
+            Console.WriteLine("Validation finished");
+            Console.WriteLine($"{ts.Hours:00}:{ts.Minutes:00}:{ts.Seconds:00}.{ts.Milliseconds / 10:00}");
+            Console.WriteLine("");
+
+            // Get Controllers which would normally be used for routing web requests
+            var controllers = TestHelper.GetAllControllers();
+
+            // Make sure all controllers can be resolved
+            ResolveAllControllersOnce(container, controllers);
+
+            Console.WriteLine("");
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine(" Starting compiled + cached tests ");
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine("");
+
+            container = CreateContainerFec();
+            ForceGarbageCollector();
+            ResolveAllControllersOnce(container, controllers); // Interpret
+            ResolveAllControllersOnce(container, controllers); // Compile, cache
+            IterateInOrder(container, controllers);
+            container = CreateContainerFec();
+            ForceGarbageCollector();
+            ResolveAllControllersOnce(container, controllers); // Interpret
+            ResolveAllControllersOnce(container, controllers); // Compile, cache
+            StartRandomOrderTest(container, controllers);
+
+
+
+            Console.WriteLine("");
+            Console.WriteLine("---------------------------------------");
+            Console.WriteLine("      Starting cold run tests          ");
+            Console.WriteLine("      This can take a long time...     ");
+            Console.WriteLine("---------------------------------------");
+            Console.WriteLine("");
+
+            container = CreateContainerFec();
+            ForceGarbageCollector();
+            IterateInOrder(container, controllers);
+            container = CreateContainerFec();
             ForceGarbageCollector();
             StartRandomOrderTest(container, controllers);
         }
@@ -266,7 +369,7 @@ ResolveAllControllersOnce of 156 controllers is done in 0.1478801 seconds
         public static void StartRandomOrderTest(IContainer container, Type[] controllerTypes)
         {
             var threadCount = controllerTypes.Length - 1;
-            var iterations = 10;
+            var iterations = 100;
             int i;
             _threads = new Thread[threadCount];
 

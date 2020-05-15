@@ -8,7 +8,23 @@ namespace LoadTest
     static class SplitDependencyGraphTest
     {
 
-        public static IContainer GetContainerForTest(int depth)
+        public static IContainer GetContainerForTestNoFec(int depth)
+        {
+            var container = new Container((rules) =>
+                rules
+                    .WithoutFastExpressionCompiler()
+                    .WithDependencyDepthToSplitObjectGraph(depth)
+                    .WithoutInterpretationForTheFirstResolution()
+                    .WithoutUseInterpretation()
+                    .With(FactoryMethod.ConstructorWithResolvableArguments)
+            ).WithWebApi(new HttpConfiguration());
+
+            Registrations.RegisterTypes(container, true);
+
+            return container;
+        }
+
+        public static IContainer GetContainerForTestFec(int depth)
         {
             var container = new Container((rules) =>
                 rules
@@ -49,7 +65,24 @@ namespace LoadTest
             {
                 Console.WriteLine("Depth " + depth);
 
-                var container = GetContainerForTest(depth);
+                var container = GetContainerForTestNoFec(depth);
+
+                ResolveAllControllers(container, controllerTypes);
+                ResolveAllControllers(container, controllerTypes);
+            }
+        }
+
+        public static void Start2()
+        {
+            Console.WriteLine("Starting WithDependencyDepthToSplitObjectGraph test");
+
+            var controllerTypes = TestHelper.GetAllControllers();
+
+            for (var depth = 1; depth < 50; depth++)
+            {
+                Console.WriteLine("Depth " + depth);
+
+                var container = GetContainerForTestFec(depth);
 
                 ResolveAllControllers(container, controllerTypes);
                 ResolveAllControllers(container, controllerTypes);
